@@ -35,6 +35,7 @@ public class Server implements Runnable
 	private String operatingSystem = System.getProperty("os.name").toLowerCase();
 	private int counter = 0;
 	private boolean shuffle = false;
+	private boolean musicPlaying = false;
 	
 	private ServerStartClickHandler serv;
 	private File folder;
@@ -74,10 +75,15 @@ public class Server implements Runnable
 					}
 					else if(readText.equals("||"))
 					{
-						stopMP3();
-						service.shutdown();
-						serv.serverGui.appendText("Music Stopped!");
-						out.writeUTF("Music Stopped!");
+						String clientMessage = "No Music Currently Playing!";
+						if(musicPlaying)
+						{
+							stopMP3();
+							service.shutdown();
+							clientMessage = "Music Stopped!";
+						}
+						serv.serverGui.appendText(clientMessage);
+						out.writeUTF(clientMessage);
 					}
 					else if(readText.equals("/list"))
 					{
@@ -96,8 +102,8 @@ public class Server implements Runnable
 					}
 					else if(readText.equals("/shuffle"))
 					{
-						randoms.removeAll(randoms);
-						if(countPlayed >= 1)
+						/*randoms.removeAll(randoms);
+						if(countPlayed >= 1 && musicPlaying)
 						{
 							stopMP3();
 							service.shutdown();
@@ -105,11 +111,11 @@ public class Server implements Runnable
 						}
 						shuffle();
 						serv.serverGui.appendText("Shuffled Songs");
-				    	out.writeUTF("Shuffled Songs");
+				    	out.writeUTF("Shuffled Songs");*/
 					}
 					else
 					{
-						shuffle = false;
+						//shuffle = false;
 						String nowPlaying = checkFilesForFilename(readText);
 					    if(nowPlaying == null)
 					    {
@@ -132,8 +138,10 @@ public class Server implements Runnable
 						        }
 						    });
 					    	countPlayed++;
-					    	serv.serverGui.appendText("Played: " + nowPlaying);
-							out.writeUTF("Now Playing: " + nowPlaying);
+					    	int lastIndexOfNowPlaying = nowPlaying.lastIndexOf("\\");
+					    	String filename = nowPlaying.substring(lastIndexOfNowPlaying + 1);
+					    	serv.serverGui.appendText("Played: " + filename);
+							out.writeUTF("Now Playing: " + filename);
 					    }
 					}
 				}
@@ -148,16 +156,19 @@ public class Server implements Runnable
 	public void stopMP3()
 	{
 		player.close();
+		musicPlaying = false;
 	}
 	
 	public void playMP3(String songName)
 	{
+		musicPlaying = false;
 		try 
 		{
 			FileInputStream fis = new FileInputStream(songName);
 			BufferedInputStream bis = new BufferedInputStream(fis);
 			player = new AdvancedPlayer(bis);
 			player.play();
+			musicPlaying = true;
 		} 
 		catch (FileNotFoundException | JavaLayerException e) 
 		{
@@ -190,12 +201,13 @@ public class Server implements Runnable
 	{
         File directory = new File(directoryName);
         File[] fList = directory.listFiles();
+        
         for (File file : fList)
         {
             if (file.isFile())
             {
-            	File fileola = new File(file.getAbsolutePath());
-                searchedSongs.add(fileola);
+            	File copyOfFile = new File(file.getAbsolutePath());
+                searchedSongs.add(copyOfFile);
             } 
             else if (file.isDirectory())
             {
@@ -209,7 +221,7 @@ public class Server implements Runnable
 		listFilesAndFilesSubDirectories(folder.toString());
 		for(int i = 0; i < searchedSongs.size(); i++)
 		{
-			if(!(files.get(i).toString().toLowerCase().endsWith("")))
+			if(!(files.get(i).toString().toLowerCase().endsWith(".mp3")))
 			{
 				files.remove(i);
 				i--;
@@ -262,34 +274,41 @@ public class Server implements Runnable
 	public String searchSongs(String searchPhrase)
 	{
 		listFilesAndFilter(searchedSongs);
-		String foundFilename = null;
+		String foundSongs = "";
+		
 		for(int i = 0; i < searchedSongs.size(); i++)
 		{
-			int lastIndex = searchedSongs.get(i).toString().lastIndexOf("\\");
-			if(searchedSongs.get(i).toString().substring(lastIndex + 1).toLowerCase().contains(searchPhrase))
+			String currentSearchedSong = searchedSongs.get(i).toString();
+			int lastIndex = currentSearchedSong.lastIndexOf("\\");
+			String currentSearchedSongName = currentSearchedSong.substring(lastIndex + 1);
+			
+			if(currentSearchedSongName.toLowerCase().contains(searchPhrase))
 			{
-				foundFilename += "\n" + i + ": " + searchedSongs.get(i).toString().substring(lastIndex + 1);
+				foundSongs += "\n" + i + ": " + currentSearchedSongName;
 			}
 		}
-		if(foundFilename == null)
+		
+		if(foundSongs.isEmpty())
 		{
-			searchedSongs.removeAll(searchedSongs);
-			return "No Items Match Your Search. Try Again";
+			foundSongs = "No Items Match Your Search. Try Again";
 		}
-		else
-		{
-			searchedSongs.removeAll(searchedSongs);
-			return foundFilename.substring(4);
-		}
+		
+		searchedSongs.removeAll(searchedSongs);
+		
+		return foundSongs;
 	}
 	
 	public String checkFilesForFilename(String songName)
 	{
 		listFilesAndFilter(searchedSongs);
 		String foundFilename = null;
+		
 		for(int i = 0; i < searchedSongs.size(); i++)
 		{
-			if(searchedSongs.get(i).toString().toLowerCase().contains(songName))
+			String currentSearchedSong = searchedSongs.get(i).toString().toLowerCase();
+			int lastIndex = currentSearchedSong.lastIndexOf("\\");
+			
+			if(currentSearchedSong.substring(lastIndex + 1).contains(songName))
 			{
 				int substringValue = 0;
 				if(operatingSystem.indexOf("win") >= 0)
@@ -308,29 +327,33 @@ public class Server implements Runnable
 	public void showSongs() throws IOException
 	{
 		listFilesAndFilter(searchedSongs);
-		String fileNames = null;
+		String fileNames = "";
+		
 		for(int i = 0; i < searchedSongs.size(); i++)
 		{
-			int lastIndex = searchedSongs.get(i).toString().lastIndexOf("\\");
-			fileNames += "\n" + i + ": " + searchedSongs.get(i).toString().substring(lastIndex + 1);
+			String currentSearchedSong = searchedSongs.get(i).toString();
+			int lastIndex = currentSearchedSong.lastIndexOf("\\");
+			fileNames += "\n" + i + ": " + currentSearchedSong.substring(lastIndex + 1);
 		}
 		searchedSongs.removeAll(searchedSongs);
 		serv.serverGui.appendText("Listed Songs");
-		if(!fileNames.isEmpty())
-		{
-			out.writeUTF(fileNames.substring(4));
-		}
-		else
+		if(fileNames.isEmpty())
 		{
 			out.writeUTF("No Songs Found In Current Directory!");
 		}
+		else
+		{
+			out.writeUTF(fileNames);
+		}
 	}
 
-	public File getFolder() {
+	public File getFolder() 
+	{
 		return folder;
 	}
 
-	public void setFolder(File folder) {
+	public void setFolder(File folder) 
+	{
 		this.folder = folder;
 	}
 }
