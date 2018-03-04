@@ -73,6 +73,7 @@ public class Server implements Runnable
 				if(in.readInt() == 1)
 				{
 					String readText = in.readUTF();
+					System.out.println(readText);
 					switch(readText)
 					{
 						case "!!":
@@ -99,10 +100,6 @@ public class Server implements Runnable
 							_serv.serverGui.appendText("Displayed Help Info");
 							String help = "!! - Closes the server\n|| - Stops the current song\n/list - Lists all songs in library\n/s <SONGNAME> - Searches and displays songs with the typed phrases\n/shuffle creates a randomly shuffled playlist for you and begins playing it";
 							_out.writeUTF(help);
-							break;
-						case "/s ":
-							_serv.serverGui.appendText("Searched Songs For: " + readText.substring(3));
-							_out.writeUTF(searchSongs(readText.substring(3)));
 							break;
 						case "/shuffle":
 							if(_musicPlaying)
@@ -146,6 +143,13 @@ public class Server implements Runnable
 							}
 							break;
 						default:
+							if(readText.contains("/s "))//Search logic
+							{
+								_serv.serverGui.appendText("Searched Songs For: " + readText.substring(3));
+								_out.writeUTF(searchSongs(readText.substring(3)));
+								break;
+							}
+							
 							String nowPlaying = checkFilesForFilename(readText);
 						    if(nowPlaying == null)
 						    {
@@ -335,7 +339,7 @@ public class Server implements Runnable
 			int lastIndex = currentSearchedSong.lastIndexOf("\\");
 			String currentSearchedSongName = currentSearchedSong.substring(lastIndex + 1);
 			
-			if(currentSearchedSongName.toLowerCase().contains(searchPhrase))
+			if(currentSearchedSongName.toLowerCase().contains(searchPhrase.toLowerCase()))
 			{
 				foundSongs += "\n" + currentSong + ": " + currentSearchedSongName;
 			}
