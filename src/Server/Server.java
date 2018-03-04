@@ -10,6 +10,9 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,24 +29,23 @@ public class Server implements Runnable
 	private ServerSocket serverSocket;
 	private Socket socket;
 	private DataInputStream in;
-	private DataOutputStream out;
+	private DataOutputStream _out;
+	private PlaybackListener _shuffleListener;
 	private AdvancedPlayer player;
-	private int countPlayed;
 	private ArrayList<File> searchedSongs = new ArrayList<File>();
-	private ArrayList<Integer> randoms = new ArrayList<Integer>();
-	private ExecutorService service;
+	private ExecutorService _service;
 	private String operatingSystem = System.getProperty("os.name").toLowerCase();
-	private int counter = 0;
-	private boolean shuffle = false;
-	private boolean musicPlaying = false;
+	Iterator<String> _queue;
+	private boolean _shuffle = false;
+	private boolean _musicPlaying = false;
 	
-	private ServerStartClickHandler serv;
+	private ServerStartClickHandler _serv;
 	private File folder;
 	
 	public Server(ServerStartClickHandler ServerRef)
 	{
-		serv = ServerRef;
-		folder = new File(serv.getPath());
+		_serv = ServerRef;
+		folder = new File(_serv.getPath());
 	}
 	
 	@Override
@@ -52,97 +54,122 @@ public class Server implements Runnable
 		try 
 		{
 			serverSocket = new ServerSocket(7777);
-			serv.serverGui.appendText("SERVER LOG:\n\n\n");
-			serv.serverGui.appendText("Server Started!\nServer Address = " + InetAddress.getLocalHost().getHostAddress());
+			_serv.serverGui.appendText("SERVER LOG:\n\n\n");
+			_serv.serverGui.appendText("Server Started!\nServer Address = " + InetAddress.getLocalHost().getHostAddress());
 			socket = serverSocket.accept();
-			serv.serverGui.appendText("Client: " + socket.getInetAddress().toString() + " has connected\n\n\n");
+			_serv.serverGui.appendText("Client: " + socket.getInetAddress().toString() + " has connected\n\n\n");
 			in = new DataInputStream(socket.getInputStream());
-			out = new DataOutputStream(socket.getOutputStream());
-			
+			_out = new DataOutputStream(socket.getOutputStream());
 			
 			while(true)
 			{
-				service = Executors.newFixedThreadPool(4);
+				_service = Executors.newFixedThreadPool(4);
+				
 				if(in.readInt() == 1)
 				{
 					String readText = in.readUTF();
-					if(readText.equals("!!"))
+					switch(readText)
 					{
-						serv.serverGui.appendText("Server Closed!");
-						out.writeUTF("Server Closed!");
-						serverSocket.close();
-						System.exit(0);
-					}
-					else if(readText.equals("||"))
-					{
-						String clientMessage = "No Music Currently Playing!";
-						if(musicPlaying)
-						{
-							stopMP3();
-							service.shutdown();
-							clientMessage = "Music Stopped!";
-						}
-						serv.serverGui.appendText(clientMessage);
-						out.writeUTF(clientMessage);
-					}
-					else if(readText.equals("/list"))
-					{
-						showSongs();
-					}
-					else if(readText.equals("?"))
-					{
-						serv.serverGui.appendText("Displayed Help Info");
-						String help = "!! - Closes the server\n|| - Stops the current song\n/list - Lists all songs in library\n/s <SONGNAME> - Searches and displays songs with the typed phrases\n/shuffle creates a randomly shuffled playlist for you and begins playing it";
-						out.writeUTF(help);
-					}
-					else if(readText.contains("/s "))
-					{
-						serv.serverGui.appendText("Searched Songs For: " + readText.substring(3));
-						out.writeUTF(searchSongs(readText.substring(3)));
-					}
-					else if(readText.equals("/shuffle"))
-					{
-						/*randoms.removeAll(randoms);
-						if(countPlayed >= 1 && musicPlaying)
-						{
-							stopMP3();
-							service.shutdown();
-							service = Executors.newFixedThreadPool(4);
-						}
-						shuffle();
-						serv.serverGui.appendText("Shuffled Songs");
-				    	out.writeUTF("Shuffled Songs");*/
-					}
-					else
-					{
-						//shuffle = false;
-						String nowPlaying = checkFilesForFilename(readText);
-					    if(nowPlaying == null)
-					    {
-					    	serv.serverGui.appendText("File/Command Not Found!");
-					    	out.writeUTF("File/Command Not Found. Try Again");
-					    }
-					    else
-					    {
-					    	if(countPlayed >= 1)
+						case "!!":
+							_serv.serverGui.appendText("Server Closed!");
+							_out.writeUTF("Server Closed!");
+							System.exit(0);
+							break;
+						case "||":
+							String clientMessage = "No Music Currently Playing!";
+							if(_musicPlaying)
 							{
 								stopMP3();
-								service.shutdown();
-								service = Executors.newFixedThreadPool(4);
+								clientMessage = "Music Stopped!";
+								if(_shuffle)
+								{
+									_queue = null;
+									_shuffle = false;
+								}
 							}
-					    	service.submit(new Runnable()
-					    	{
-						        public void run() 
-						        {
-						        	playMP3(nowPlaying);
-						        }
-						    });
-					    	countPlayed++;
-					    	int lastIndexOfNowPlaying = nowPlaying.lastIndexOf("\\");
-					    	String filename = nowPlaying.substring(lastIndexOfNowPlaying + 1);
-					    	serv.serverGui.appendText("Played: " + filename);
-							out.writeUTF("Now Playing: " + filename);
-					    }
+							_serv.serverGui.appendText(clientMessage);
+							_out.writeUTF(clientMessage);
+							break;
+						case "/list":
+							showSongs();
+							break;
+						case "?":
+							_serv.serverGui.appendText("Displayed Help Info");
+							String help = "!! - Closes the server\n|| - Stops the current song\n/list - Lists all songs in library\n/s <SONGNAME> - Searches and displays songs with the typed phrases\n/shuffle creates a randomly shuffled playlist for you and begins playing it";
+							_out.writeUTF(help);
+							break;
+						case "/s ":
+							_serv.serverGui.appendText("Searched Songs For: " + readText.substring(3));
+							_out.writeUTF(searchSongs(readText.substring(3)));
+							break;
+						case "/shuffle":
+							if(_musicPlaying)
+							{
+								stopMP3();
+							}
+							shufflePlaylist(createPlaylist());
+							_serv.serverGui.appendText("Shuffled Songs");
+					    	_out.writeUTF("Shuffled Songs");
+							break;
+						case ">>":
+							if(_musicPlaying && _shuffle)
+							{
+								stopMP3();
+								if(_queue.hasNext())
+								{
+									String nextSong = _queue.next();
+									String nextSongFilename = formatFilenameForOS(nextSong);
+									_service.submit(new Runnable()
+									{
+										public void run()
+										{
+											playMP3(nextSongFilename, true, _shuffleListener);
+										}
+									});
+									_musicPlaying = true;
+									_serv.serverGui.appendText("Current song: " + nextSongFilename);
+									_out.writeUTF("Current song: " + nextSongFilename);
+								}
+								else
+								{
+									_serv.serverGui.appendText("No songs left in queue (Shuffle again?)");
+									_out.writeUTF("No songs left in queue (Shuffle again?)");
+								}
+							}
+							else
+							{
+								_serv.serverGui.appendText("No songs left in queue (Shuffle again?)");
+								_out.writeUTF("No songs left in queue (Shuffle again?)");
+							}
+							break;
+						default:
+							String nowPlaying = checkFilesForFilename(readText);
+						    if(nowPlaying == null)
+						    {
+						    	_serv.serverGui.appendText("File/Command Not Found!");
+						    	_out.writeUTF("File/Command Not Found. Try Again");
+						    }
+						    else
+						    {
+						    	if(_musicPlaying)
+								{
+									stopMP3();
+								}
+						    	_service.submit(new Runnable()
+						    	{
+							        public void run() 
+							        {
+							        	playMP3(nowPlaying);
+							        }
+							    });
+						    	_musicPlaying = true;
+						    	_shuffle = false;
+						    	int lastIndexOfNowPlaying = nowPlaying.lastIndexOf("\\");
+						    	String filename = nowPlaying.substring(lastIndexOfNowPlaying + 1);
+						    	_serv.serverGui.appendText("Played: " + filename);
+								_out.writeUTF("Now Playing: " + filename);
+						    }
+							break;
 					}
 				}
 			}
@@ -152,49 +179,49 @@ public class Server implements Runnable
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void stopMP3()
 	{
 		player.close();
-		musicPlaying = false;
+		_musicPlaying = false;
+		_service.shutdown();
+		_service = Executors.newFixedThreadPool(4);
 	}
 	
 	public void playMP3(String songName)
 	{
-		musicPlaying = false;
 		try 
 		{
 			FileInputStream fis = new FileInputStream(songName);
 			BufferedInputStream bis = new BufferedInputStream(fis);
 			player = new AdvancedPlayer(bis);
 			player.play();
-			musicPlaying = true;
 		} 
 		catch (FileNotFoundException | JavaLayerException e) 
 		{
 			e.printStackTrace();
-			serv.serverGui.appendText("Failed to play the file.");
+			_serv.serverGui.appendText("Failed to play the file.");
 		}
-		/*if(shuffle)
+	}
+	
+	public void playMP3(String songName, Boolean shuffle, PlaybackListener shuffleListener)
+	{
+		try 
 		{
-			player.setPlayBackListener(new PlaybackListener() 
+			FileInputStream fis = new FileInputStream(songName);
+			BufferedInputStream bis = new BufferedInputStream(fis);
+			player = new AdvancedPlayer(bis);
+			if(shuffle)
 			{
-		    @Override
-		    public void playbackFinished(PlaybackEvent event) 
-		    {
-		        //pausedOnFrame = event.getFrame();
-		    	counter++;
-		    	int lastIndex = searchedSongs.get(randoms.get(counter)).toString().lastIndexOf("\\");
-				String foundFilename = searchedSongs.get(randoms.get(counter)).toString().substring(lastIndex + 1);
-				stopMP3();
-				playMP3(foundFilename);
-		    }
-		});
-		}
-		else
+				player.setPlayBackListener(shuffleListener);
+			}
+			player.play();
+		} 
+		catch (FileNotFoundException | JavaLayerException e) 
 		{
-			
-		}*/
+			e.printStackTrace();
+			_serv.serverGui.appendText("Failed to play the file.");
+		}
 	}
 	
 	public void listFilesAndFilesSubDirectories(String directoryName)
@@ -229,46 +256,84 @@ public class Server implements Runnable
 		}
 	}
 	
-	public void shuffle()
+	private LinkedHashSet<String> createPlaylist()
 	{
-		counter = 0;
+		LinkedHashSet<String> playlist = new LinkedHashSet<String>();
+		
 		listFilesAndFilter(searchedSongs);
 		Random rand = new Random();
-		for(int i = 0; i < searchedSongs.size(); i++)
+		
+		while(playlist.size() != searchedSongs.size())
 		{
 			int randomNumber = rand.nextInt(searchedSongs.size());
-			while(randoms.contains(randomNumber))
-			{
-				randomNumber = rand.nextInt(searchedSongs.size());
-			}
-			randoms.add(randomNumber);
-			System.out.println(randoms.get(i));
+			playlist.add(searchedSongs.get(randomNumber).toString());
 		}
-		int lastIndex = searchedSongs.get(randoms.get(counter)).toString().lastIndexOf("\\");
-		String foundFilename = searchedSongs.get(randoms.get(counter)).toString().substring(lastIndex + 1);
-    	service.submit(new Runnable() 
-    	{
-	        public void run() 
-	        {
-	        	playMP3(foundFilename);
-	        	shuffle = true;
-	        	player.setPlayBackListener(new PlaybackListener() 
-	        	{
-				    @Override
-				    public void playbackFinished(PlaybackEvent event) 
-				    {
-				        //pausedOnFrame = event.getFrame();
-				    	counter++;
-				    	int lastIndex = searchedSongs.get(randoms.get(counter)).toString().lastIndexOf("\\");
-						String foundFilename = searchedSongs.get(randoms.get(counter)).toString().substring(lastIndex + 1);
-						stopMP3();
-						playMP3(foundFilename);
-				    }
-				});
-	        }
-	    });
-    	searchedSongs.removeAll(searchedSongs);
-    	countPlayed += 1;
+		return playlist;
+	}
+	
+	public void shufflePlaylist(LinkedHashSet<String> playlist)
+	{
+		_queue = playlist.iterator();
+		if(_queue.hasNext())
+		{
+			String currentSong = _queue.next();
+			
+			String currentSongFilename = formatFilenameForOS(currentSong);
+			
+			if(_musicPlaying)
+			{
+				stopMP3();
+			}
+			
+			_shuffleListener = new PlaybackListener()
+			{
+				@Override
+				public void playbackFinished(PlaybackEvent event) 
+				{
+					stopMP3();
+					
+					if(_queue.hasNext())
+					{
+						String nextSong = _queue.next();
+						String nextSongFilename = formatFilenameForOS(nextSong);
+						
+						_service.submit(new Runnable()
+						{
+							public void run()
+							{
+								playMP3(nextSongFilename, true, _shuffleListener);
+							}
+						});
+						
+						_musicPlaying = true;
+						_shuffle = true;
+					}
+				}
+			};
+			
+			_service.submit(new Runnable()
+			{
+				public void run()
+				{
+					playMP3(currentSongFilename, true, _shuffleListener);
+				}
+			});
+			
+			_musicPlaying = true;
+			_shuffle = true;
+		}
+		
+		searchedSongs.removeAll(searchedSongs);
+	}
+
+	private String formatFilenameForOS(String currentSong)
+	{
+		int substringValue = 0;
+		if(operatingSystem.indexOf("win") >= 0)
+		{
+			substringValue = 2;
+		}
+		return currentSong.substring(substringValue);
 	}
 
 	public String searchSongs(String searchPhrase)
@@ -310,12 +375,7 @@ public class Server implements Runnable
 			
 			if(currentSearchedSong.substring(lastIndex + 1).contains(songName))
 			{
-				int substringValue = 0;
-				if(operatingSystem.indexOf("win") >= 0)
-				{
-					substringValue = 2;
-				}
-				foundFilename = searchedSongs.get(i).toString().substring(substringValue);//CHANGE TO 0 IF ON MAC      CHANGE TO 2 IF ON WINDOWS
+				foundFilename = formatFilenameForOS(searchedSongs.get(i).toString());
 				searchedSongs.removeAll(searchedSongs);
 				return foundFilename;
 			}
@@ -336,14 +396,14 @@ public class Server implements Runnable
 			fileNames += "\n" + i + ": " + currentSearchedSong.substring(lastIndex + 1);
 		}
 		searchedSongs.removeAll(searchedSongs);
-		serv.serverGui.appendText("Listed Songs");
+		_serv.serverGui.appendText("Listed Songs");
 		if(fileNames.isEmpty())
 		{
-			out.writeUTF("No Songs Found In Current Directory!");
+			_out.writeUTF("No Songs Found In Current Directory!");
 		}
 		else
 		{
-			out.writeUTF(fileNames);
+			_out.writeUTF(fileNames);
 		}
 	}
 
