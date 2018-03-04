@@ -29,18 +29,13 @@ public class ConnectToServerGUI implements Runnable
 		
 		connectText = new JTextField();
 		connectText.setPreferredSize(new Dimension(180, 50));
-		connectText.setText("192.168.1.22");
+		connectText.setText("Insert Ip Here");
 		connectText.setFont(new Font("Calibri", 2, 24));
 		connectText.setForeground(Color.LIGHT_GRAY);
 		
 		connectText.addMouseListener(new MouseListener(){
 			@Override
-			public void mouseClicked(MouseEvent arg0) 
-			{
-				connectText.setText("");
-				connectText.setFont(new Font("Calibri", 0, 24));
-				connectText.setForeground(Color.BLACK);
-			}
+			public void mouseClicked(MouseEvent arg0) {}
 			@Override
 			public void mouseEntered(MouseEvent e) {}
 			@Override
@@ -48,7 +43,15 @@ public class ConnectToServerGUI implements Runnable
 			@Override
 			public void mousePressed(MouseEvent e) {}
 			@Override
-			public void mouseReleased(MouseEvent e) {}
+			public void mouseReleased(MouseEvent e) 
+			{
+				if(connectText.getText().equals("Insert Ip Here"))
+				{
+					connectText.setText("");
+					connectText.setFont(new Font("Calibri", 0, 24));
+					connectText.setForeground(Color.BLACK);
+				}
+			}
 		});
 		
 		panel.setLayout(new BorderLayout());

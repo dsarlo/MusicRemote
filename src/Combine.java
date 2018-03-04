@@ -35,6 +35,7 @@ public class Combine
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
 				SwingUtilities.invokeLater(new ConnectToServerGUI());
+				client.setEnabled(false);
 			}
 			
 		});
@@ -44,6 +45,7 @@ public class Combine
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
 				SwingUtilities.invokeLater(new ServerGUI());
+				server.setEnabled(false);
 			}
 			
 		});

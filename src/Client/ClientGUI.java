@@ -50,7 +50,7 @@ public class ClientGUI implements Runnable
 			}
 	    });
 		sendText.setPreferredSize(new Dimension(600, 100));
-		sendText.setText("/s Rewind.mp3");
+		sendText.setText("");
 		sendText.setFont(new Font("Calibri", 0, 24));
 		
 		clientText = new JTextPane();
