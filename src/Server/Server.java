@@ -9,9 +9,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,9 +38,11 @@ public class Server implements Runnable
 	private ArrayList<File> _songsInLibrary;
 	private ExecutorService _service;
 	
-	private String operatingSystem = System.getProperty("os.name").toLowerCase();
+	private String _operatingSystem = System.getProperty("os.name").toLowerCase();
 	
-	private Iterator<String> _shuffleQueue;
+	private Queue<String> _shuffleQueue;
+	private Deque<String> _shufflePreviouslyListened;
+	private String _currentSong;
 	
 	private boolean _shuffle = false;
 	private boolean _musicPlaying = false;
@@ -49,6 +53,8 @@ public class Server implements Runnable
 	{
 		_serv = ServerRef;
 		_songsInLibrary = new ArrayList<File>();
+		_shufflePreviouslyListened = new ArrayDeque<String>();
+		_currentSong = "";
 		File selectedMusicLibrary = new File(_serv.getPath());
 		getListOfSongsInLibrary(selectedMusicLibrary);
 	}
@@ -114,21 +120,22 @@ public class Server implements Runnable
 							if(_musicPlaying && _shuffle)
 							{
 								stopMP3();
-								if(_shuffleQueue.hasNext())
+								if(_shuffleQueue.peek() != null)
 								{
-									String nextSong = _shuffleQueue.next();
-									String nextSongFilename = formatFilenameForOS(nextSong);
+									_shufflePreviouslyListened.push(_currentSong);
+									String nextSong = _shuffleQueue.poll();
 									_service.submit(new Runnable()
 									{
 										public void run()
 										{
-											playMP3(nextSongFilename, true, _shuffleListener);
+											playMP3(nextSong, true, _shuffleListener);
 										}
 									});
+									_currentSong = nextSong;
 									_musicPlaying = true;
 							    	_shuffle = true;
-									_serv.serverGui.appendText("Current song: " + nextSongFilename);
-									_out.writeUTF("Current song: " + nextSongFilename);
+									_serv.serverGui.appendText("Current song: " + nextSong);
+									_out.writeUTF("Current song: " + nextSong);
 								}
 								else
 								{
@@ -138,8 +145,41 @@ public class Server implements Runnable
 							}
 							else
 							{
-								_serv.serverGui.appendText("No songs left in queue (Shuffle again?)");
-								_out.writeUTF("No songs left in queue (Shuffle again?)");
+								_serv.serverGui.appendText("No music playing or shuffle isn't on");
+								_out.writeUTF("No music playing or shuffle isn't on");
+							}
+							break;
+						case "<<":
+							if(_musicPlaying && _shuffle)
+							{
+								if(_shufflePreviouslyListened.peek() != null)
+								{
+									stopMP3();
+									addSongToFrontOfQueue(_currentSong);
+									String nextSong = _shufflePreviouslyListened.pop();
+									_service.submit(new Runnable()
+									{
+										public void run()
+										{
+											playMP3(nextSong, true, _shuffleListener);
+										}
+									});
+									_currentSong = nextSong;
+									_musicPlaying = true;
+							    	_shuffle = true;
+									_serv.serverGui.appendText("Current song: " + nextSong);
+									_out.writeUTF("Current song: " + nextSong);
+								}
+								else
+								{
+									_serv.serverGui.appendText("No songs in previously listened to queue");
+									_out.writeUTF("No songs in previously listened to queue");
+								}
+							}
+							else
+							{
+								_serv.serverGui.appendText("No music playing or shuffle isn't on");
+								_out.writeUTF("No music playing or shuffle isn't on");
 							}
 							break;
 						default:
@@ -169,7 +209,8 @@ public class Server implements Runnable
 							        	playMP3(nowPlaying);
 							        }
 							    });
-						    	
+						    	//if(!_currentSong.isEmpty()) _shufflePreviouslyListened.push(_currentSong);
+						    	//_currentSong = nowPlaying;
 						    	_musicPlaying = true;
 						    	_shuffle = false;
 						    	int lastIndexOfNowPlaying = nowPlaying.lastIndexOf("\\");
@@ -186,6 +227,20 @@ public class Server implements Runnable
 		{
 			e.printStackTrace();
 		}
+	}
+
+	private void addSongToFrontOfQueue(String song) 
+	{
+		Queue<String> tempQueue = new LinkedList<String>();
+		
+		tempQueue.add(song);
+		
+		for(String currentString : _shuffleQueue)
+		{
+			tempQueue.add(currentString);
+		}
+		
+		_shuffleQueue = tempQueue;
 	}
 
 	public void stopMP3()
@@ -251,27 +306,27 @@ public class Server implements Runnable
         }
     }
 	
-	private LinkedHashSet<String> createPlaylist()
+	private Queue<String> createPlaylist()
 	{
-		LinkedHashSet<String> playlist = new LinkedHashSet<String>();
+		Queue<String> playlist = new LinkedList<String>();
 		Random rand = new Random();
 		
 		while(playlist.size() != _songsInLibrary.size())
 		{
 			int randomNumber = rand.nextInt(_songsInLibrary.size());
-			playlist.add(_songsInLibrary.get(randomNumber).toString());
+			playlist.add(formatFilenameForOS(_songsInLibrary.get(randomNumber).toString()));
 		}
 		return playlist;
 	}
 	
-	public void shufflePlaylist(LinkedHashSet<String> playlist)
+	public void shufflePlaylist(Queue<String> playlist)
 	{
-		_shuffleQueue = playlist.iterator();
-		if(_shuffleQueue.hasNext())
+		_shuffleQueue = playlist;
+		if(_shuffleQueue.peek() != null)
 		{
-			String currentSong = _shuffleQueue.next();
+			if(!_currentSong.isEmpty()) _shufflePreviouslyListened.push(_currentSong);
 			
-			String currentSongFilename = formatFilenameForOS(currentSong);
+			String currentSong = _shuffleQueue.poll();
 			
 			if(_musicPlaying)
 			{
@@ -285,19 +340,19 @@ public class Server implements Runnable
 				{
 					stopMP3();
 					
-					if(_shuffleQueue.hasNext())
+					if(_shuffleQueue.peek() != null)
 					{
-						String nextSong = _shuffleQueue.next();
-						String nextSongFilename = formatFilenameForOS(nextSong);
+						_shufflePreviouslyListened.push(_currentSong);
+						String nextSong = _shuffleQueue.poll();
 						
 						_service.submit(new Runnable()
 						{
 							public void run()
 							{
-								playMP3(nextSongFilename, true, _shuffleListener);
+								playMP3(nextSong, true, _shuffleListener);
 							}
 						});
-						
+						_currentSong = nextSong;
 						_musicPlaying = true;
 				    	_shuffle = true;
 					}
@@ -308,10 +363,10 @@ public class Server implements Runnable
 			{
 				public void run()
 				{
-					playMP3(currentSongFilename, true, _shuffleListener);
+					playMP3(currentSong, true, _shuffleListener);
 				}
 			});
-			
+			_currentSong = currentSong;
 			_musicPlaying = true;
 	    	_shuffle = true;
 		}
@@ -321,7 +376,7 @@ public class Server implements Runnable
 	{
 		int substringValue = 0;
 		
-		if(operatingSystem.indexOf("win") >= 0)
+		if(_operatingSystem.indexOf("win") >= 0)
 		{
 			substringValue = 2;
 		}
