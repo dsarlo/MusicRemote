@@ -1,0 +1,2 @@
+# MusicRemote
+A Wi-Fi based music controller (client and server written in Java). Uses sockets to connect the client and server. Commands are sent from the client to the server in order to manipulate the local playlist (MP3 files in a local folder) on the server. All songs are played on the server. The client acts as a media remote. This uses an opensource plugin from javazoom for the mediaplayer.
